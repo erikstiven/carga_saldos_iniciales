@@ -950,7 +950,11 @@ function cargar_ord_compra_respaldo($aForm = '')
 
         $archivo = $aForm['archivo'];
         $alertScript = function ($message, $type = 'warning') {
-            $encoded = json_encode($message, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            $safeMessage = trim((string)$message);
+            if ($safeMessage === '') {
+                $safeMessage = 'Se produjo un error al procesar la solicitud.';
+            }
+            $encoded = json_encode($safeMessage, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             return "var msg = {$encoded};"
                 . "if (typeof Swal !== 'undefined') {"
                 . "Swal.fire({title: '<h4><strong>' + msg + '</strong></h4>', width: 800, type: '{$type}', showConfirmButton: true});"
