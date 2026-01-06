@@ -949,10 +949,32 @@ function cargar_ord_compra_respaldo($aForm = '')
         $array_cuen_cod = array_dato($oIfx, $sql, 'ccosn_cod_ccosn', 'ccosn_nom_ccosn');
 
         $archivo = $aForm['archivo'];
+        $alertScript = function ($message, $type = 'warning') {
+            $safeMessage = trim((string)$message);
+            if ($safeMessage === '') {
+                $safeMessage = 'Se produjo un error al procesar la solicitud.';
+            }
+            $encoded = json_encode($safeMessage, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+            if ($encoded === false || $encoded === 'null') {
+                $encoded = json_encode('Se produjo un error al procesar la solicitud.', JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            }
+            return "var msg = {$encoded};"
+                . "if (typeof Swal !== 'undefined') {"
+                . "Swal.fire({title: '<h4><strong>' + msg + '</strong></h4>', width: 800, type: '{$type}', showConfirmButton: true});"
+                . "} else { alert(msg); }";
+        };
 
         // archivo txt
+        if (empty($archivo)) {
+            $oReturn->script($alertScript('No se encontró un archivo TXT para procesar. Cárguelo e intente nuevamente.', 'error'));
+            $oReturn->assign("divFormularioDetalle2", "innerHTML", '');
+            $oReturn->script("jsRemoveWindowLoad();");
+            return $oReturn;
+        }
+
         $archivo_real = substr($archivo, 12);
-        list($xxxx, $exten) = explode(".", $archivo_real);
+        $archivo_partes = explode(".", $archivo_real);
+        $exten = (count($archivo_partes) > 1) ? strtolower(end($archivo_partes)) : '';
 
 
         if ($exten == 'txt') {
@@ -961,6 +983,11 @@ function cargar_ord_compra_respaldo($aForm = '')
             $file       = fopen($nombre_archivo, "r");
             $datos      = file($nombre_archivo);
             $NumFilas   = count($datos);
+            $array      = array();
+            $discardedRows = 0;
+            $formatErrors = array();
+            $validationErrors = array();
+            $processedRows = 0;
 
             $table_cab  = '<br><br>';
             $table_cab  = '<h4>Lista del archivo exportado</h4>';
@@ -979,16 +1006,29 @@ function cargar_ord_compra_respaldo($aForm = '')
             $table_cab .= '</tr>';
             $x = 1;
             // $oReturn->alert('Buscando ...');
-            unset($array);
-
             foreach ($datos as $val) {
                 /* dasi_cod_cuen	dasi_cod_cact	ccos_cod_ccos	dasi_dml_dasi	dasi_cml_dasi	dasi_det_asi
 
                     */
-
+                $columns = explode("	", $val);
+                if (count($columns) < 6) {
+                    if ($x > 1 && trim($val) !== '') {
+                        $formatErrors[] = "formato inválido en la fila " . ($x - 1) . " (se esperaban 6 columnas)";
+                        $discardedRows++;
+                    }
+                    $x++;
+                    continue;
+                }
                 list(
                     $dasi_cod_cuen,    $dasi_cod_cact,    $ccos_cod_ccos,    $dasi_dml_dasi,    $dasi_cml_dasi,    $dasi_det_asi
-                ) = explode("	", $val);
+                ) = $columns;
+                $dasi_cod_cuen = trim($dasi_cod_cuen);
+                $dasi_cod_cact = trim($dasi_cod_cact);
+                $ccos_cod_ccos = trim($ccos_cod_ccos);
+                $dasi_dml_dasi = trim($dasi_dml_dasi);
+                $dasi_cml_dasi = trim($dasi_cml_dasi);
+                $dasi_det_asi = trim($dasi_det_asi);
+                $processedRows++;
 
                 if ($x > 1) {
 
@@ -1028,6 +1068,11 @@ function cargar_ord_compra_respaldo($aForm = '')
                     } else {
                         $table_cab .= '<td style="background:yellow">' . $dasi_cod_cuen . '</td>';
                         $control_insert_array = false;
+                        if (empty(trim($dasi_cod_cuen))) {
+                            $validationErrors[] = "campo dasi_cod_cuen vacío en la fila " . ($x - 1);
+                        } else {
+                            $validationErrors[] = "campo dasi_cod_cuen inválido en la fila " . ($x - 1);
+                        }
                     }
 
                     if (!empty($cuen_nom_cuen)) {
@@ -1042,9 +1087,12 @@ function cargar_ord_compra_respaldo($aForm = '')
                         $table_cab .= '<td>' . $dasi_cod_cact . '</td>';
                     } else if (empty($dasi_cod_cact)) {
                         $table_cab .= '<td>' . $dasi_cod_cact . '</td>';
+                        $control_insert_array = false;
+                        $validationErrors[] = "campo dasi_cod_cact vacío en la fila " . ($x - 1);
                     } else {
                         $table_cab .= '<td style="background:yellow">' . $dasi_cod_cact . '</td>';
                         $control_insert_array = false;
+                        $validationErrors[] = "campo dasi_cod_cact inválido en la fila " . ($x - 1);
                     }
 
                     if (!empty($cact_nom_cact)) {
@@ -1062,9 +1110,12 @@ function cargar_ord_compra_respaldo($aForm = '')
                         $table_cab .= '<td>' . $ccos_cod_ccos . '</td>';
                     } else if (empty($ccos_cod_ccos)) {
                         $table_cab .= '<td>' . $ccos_cod_ccos . '</td>';
+                        $control_insert_array = false;
+                        $validationErrors[] = "campo ccos_cod_ccos vacío en la fila " . ($x - 1);
                     } else {
                         $table_cab .= '<td style="background:yellow">' . $ccos_cod_ccos . '</td>';
                         $control_insert_array = false;
+                        $validationErrors[] = "campo ccos_cod_ccos inválido en la fila " . ($x - 1);
                     }
 
                     if (!empty($ccosn_nom_ccosn)) {
@@ -1086,6 +1137,7 @@ function cargar_ord_compra_respaldo($aForm = '')
                     } else {
                         $table_cab .= '<td style="background:yellow">' . $dasi_dml_dasi . '</td>';
                         $control_insert_array = false;
+                        $validationErrors[] = "campo dasi_dml_dasi vacío en la fila " . ($x - 1);
                     }
 
                     // CREDITO
@@ -1096,6 +1148,7 @@ function cargar_ord_compra_respaldo($aForm = '')
                     } else {
                         $table_cab .= '<td style="background:yellow">' . $dasi_cml_dasi . '</td>';
                         $control_insert_array = false;
+                        $validationErrors[] = "campo dasi_cml_dasi vacío en la fila " . ($x - 1);
                     }
 
                     // DETALLE
@@ -1104,6 +1157,7 @@ function cargar_ord_compra_respaldo($aForm = '')
                     } else {
                         $table_cab .= '<td style="background:yellow">' . $dasi_det_asi . '</td>';
                         $control_insert_array = false;
+                        $validationErrors[] = "campo dasi_det_asi vacío en la fila " . ($x - 1);
                     }
 
 
@@ -1124,6 +1178,8 @@ function cargar_ord_compra_respaldo($aForm = '')
                             $dasi_cml_dasi,
                             $dasi_det_asi
                         );
+                    } else {
+                        $discardedRows++;
                     }
 
 
@@ -1146,18 +1202,34 @@ function cargar_ord_compra_respaldo($aForm = '')
             $html_tabla .= "</table>";
 
             $oReturn->assign("divFormularioDetalle2", "innerHTML", $html_tabla);
+            if (!empty($formatErrors)) {
+                $mensajeError = "Error al procesar el archivo: " . implode(". ", array_slice($formatErrors, 0, 3)) . ".";
+                $oReturn->script($alertScript($mensajeError, 'error'));
+            } elseif ($processedRows <= 1 || count($array) === 0) {
+                if ($discardedRows > 0 || !empty($validationErrors)) {
+                    $detalle = '';
+                    if (!empty($validationErrors)) {
+                        $detalle = " " . implode(". ", array_slice($validationErrors, 0, 3)) . ".";
+                    }
+                    $oReturn->script($alertScript("No se pudo completar la consulta. Existen registros descartados por validación." . $detalle, 'warning'));
+                } else {
+                    $oReturn->script($alertScript('No se encontraron datos para el archivo cargado.', 'warning'));
+                }
+            } elseif ($discardedRows > 0 || !empty($validationErrors)) {
+                $detalle = '';
+                if (!empty($validationErrors)) {
+                    $detalle = " " . implode(". ", array_slice($validationErrors, 0, 3)) . ".";
+                }
+                $oReturn->script($alertScript("Consulta ejecutada con registros descartados por validación." . $detalle, 'warning'));
+            } else {
+                $oReturn->script($alertScript('Consulta ejecutada correctamente.', 'success'));
+            }
         } else {
-            $oReturn->script("Swal.fire({
-                                            title: '<h3><strong>!!!!....Archivo Incorrecto, por favor subir Archivo con extension .txt...!!!!!</strong></h3>',
-                                            width: 800,
-                                            type: 'error',   
-                                            timer: 3000   ,
-                                            showConfirmButton: false
-                                            })");
+            $oReturn->script($alertScript('Archivo incorrecto, por favor subir archivo con extensión .txt.', 'error'));
             $oReturn->assign("divFormularioDetalle2", "innerHTML", '');
         }
     } catch (Exception $ex) {
-        $oReturn->alert($ex->getMessage());
+        $oReturn->script($alertScript($ex->getMessage(), 'error'));
     }
 
     $oReturn->script("jsRemoveWindowLoad();");
