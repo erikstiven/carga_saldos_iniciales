@@ -961,6 +961,11 @@ function cargar_ord_compra_respaldo($aForm = '')
             $file       = fopen($nombre_archivo, "r");
             $datos      = file($nombre_archivo);
             $NumFilas   = count($datos);
+            $array      = array();
+            $discardedRows = 0;
+            $formatErrors = array();
+            $validationErrors = array();
+            $processedRows = 0;
 
             $table_cab  = '<br><br>';
             $table_cab  = '<h4>Lista del archivo exportado</h4>';
@@ -979,16 +984,23 @@ function cargar_ord_compra_respaldo($aForm = '')
             $table_cab .= '</tr>';
             $x = 1;
             // $oReturn->alert('Buscando ...');
-            unset($array);
-
             foreach ($datos as $val) {
                 /* dasi_cod_cuen	dasi_cod_cact	ccos_cod_ccos	dasi_dml_dasi	dasi_cml_dasi	dasi_det_asi
 
                     */
-
+                $columns = explode("	", $val);
+                if (count($columns) < 6) {
+                    if ($x > 1 && trim($val) !== '') {
+                        $formatErrors[] = "formato inválido en la fila " . ($x - 1);
+                        $discardedRows++;
+                    }
+                    $x++;
+                    continue;
+                }
                 list(
                     $dasi_cod_cuen,    $dasi_cod_cact,    $ccos_cod_ccos,    $dasi_dml_dasi,    $dasi_cml_dasi,    $dasi_det_asi
-                ) = explode("	", $val);
+                ) = $columns;
+                $processedRows++;
 
                 if ($x > 1) {
 
@@ -1028,6 +1040,11 @@ function cargar_ord_compra_respaldo($aForm = '')
                     } else {
                         $table_cab .= '<td style="background:yellow">' . $dasi_cod_cuen . '</td>';
                         $control_insert_array = false;
+                        if (empty(trim($dasi_cod_cuen))) {
+                            $validationErrors[] = "campo dasi_cod_cuen vacío en la fila " . ($x - 1);
+                        } else {
+                            $validationErrors[] = "campo dasi_cod_cuen inválido en la fila " . ($x - 1);
+                        }
                     }
 
                     if (!empty($cuen_nom_cuen)) {
@@ -1045,6 +1062,7 @@ function cargar_ord_compra_respaldo($aForm = '')
                     } else {
                         $table_cab .= '<td style="background:yellow">' . $dasi_cod_cact . '</td>';
                         $control_insert_array = false;
+                        $validationErrors[] = "campo dasi_cod_cact inválido en la fila " . ($x - 1);
                     }
 
                     if (!empty($cact_nom_cact)) {
@@ -1065,6 +1083,7 @@ function cargar_ord_compra_respaldo($aForm = '')
                     } else {
                         $table_cab .= '<td style="background:yellow">' . $ccos_cod_ccos . '</td>';
                         $control_insert_array = false;
+                        $validationErrors[] = "campo ccos_cod_ccos inválido en la fila " . ($x - 1);
                     }
 
                     if (!empty($ccosn_nom_ccosn)) {
@@ -1086,6 +1105,7 @@ function cargar_ord_compra_respaldo($aForm = '')
                     } else {
                         $table_cab .= '<td style="background:yellow">' . $dasi_dml_dasi . '</td>';
                         $control_insert_array = false;
+                        $validationErrors[] = "campo dasi_dml_dasi vacío en la fila " . ($x - 1);
                     }
 
                     // CREDITO
@@ -1096,6 +1116,7 @@ function cargar_ord_compra_respaldo($aForm = '')
                     } else {
                         $table_cab .= '<td style="background:yellow">' . $dasi_cml_dasi . '</td>';
                         $control_insert_array = false;
+                        $validationErrors[] = "campo dasi_cml_dasi vacío en la fila " . ($x - 1);
                     }
 
                     // DETALLE
@@ -1104,6 +1125,7 @@ function cargar_ord_compra_respaldo($aForm = '')
                     } else {
                         $table_cab .= '<td style="background:yellow">' . $dasi_det_asi . '</td>';
                         $control_insert_array = false;
+                        $validationErrors[] = "campo dasi_det_asi vacío en la fila " . ($x - 1);
                     }
 
 
@@ -1124,6 +1146,8 @@ function cargar_ord_compra_respaldo($aForm = '')
                             $dasi_cml_dasi,
                             $dasi_det_asi
                         );
+                    } else {
+                        $discardedRows++;
                     }
 
 
@@ -1146,6 +1170,46 @@ function cargar_ord_compra_respaldo($aForm = '')
             $html_tabla .= "</table>";
 
             $oReturn->assign("divFormularioDetalle2", "innerHTML", $html_tabla);
+            if (!empty($formatErrors)) {
+                $mensajeError = "Error al procesar el archivo: " . implode(". ", array_slice($formatErrors, 0, 3)) . ".";
+                $oReturn->script("Swal.fire({
+                                            title: '<h4><strong>" . $mensajeError . "</strong></h4>',
+                                            width: 800,
+                                            type: 'error',
+                                            showConfirmButton: true
+                                            })");
+            } elseif ($processedRows <= 1 || count($array) === 0) {
+                if ($discardedRows > 0 || !empty($validationErrors)) {
+                    $detalle = '';
+                    if (!empty($validationErrors)) {
+                        $detalle = " " . implode(". ", array_slice($validationErrors, 0, 3)) . ".";
+                    }
+                    $oReturn->script("Swal.fire({
+                                            title: '<h4><strong>No se pudo completar la consulta. Existen registros descartados por validación." . $detalle . "</strong></h4>',
+                                            width: 800,
+                                            type: 'warning',
+                                            showConfirmButton: true
+                                            })");
+                } else {
+                    $oReturn->script("Swal.fire({
+                                            title: '<h4><strong>No se encontraron datos para el archivo cargado.</strong></h4>',
+                                            width: 800,
+                                            type: 'warning',
+                                            showConfirmButton: true
+                                            })");
+                }
+            } elseif ($discardedRows > 0 || !empty($validationErrors)) {
+                $detalle = '';
+                if (!empty($validationErrors)) {
+                    $detalle = " " . implode(". ", array_slice($validationErrors, 0, 3)) . ".";
+                }
+                $oReturn->script("Swal.fire({
+                                            title: '<h4><strong>Consulta ejecutada con registros descartados por validación." . $detalle . "</strong></h4>',
+                                            width: 800,
+                                            type: 'warning',
+                                            showConfirmButton: true
+                                            })");
+            }
         } else {
             $oReturn->script("Swal.fire({
                                             title: '<h3><strong>!!!!....Archivo Incorrecto, por favor subir Archivo con extension .txt...!!!!!</strong></h3>',
@@ -1157,7 +1221,12 @@ function cargar_ord_compra_respaldo($aForm = '')
             $oReturn->assign("divFormularioDetalle2", "innerHTML", '');
         }
     } catch (Exception $ex) {
-        $oReturn->alert($ex->getMessage());
+        $oReturn->script("Swal.fire({
+                                            title: '<h4><strong>" . $ex->getMessage() . "</strong></h4>',
+                                            width: 800,
+                                            type: 'error',
+                                            showConfirmButton: true
+                                            })");
     }
 
     $oReturn->script("jsRemoveWindowLoad();");
