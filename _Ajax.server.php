@@ -1022,6 +1022,12 @@ function cargar_ord_compra_respaldo($aForm = '')
                 list(
                     $dasi_cod_cuen,    $dasi_cod_cact,    $ccos_cod_ccos,    $dasi_dml_dasi,    $dasi_cml_dasi,    $dasi_det_asi
                 ) = $columns;
+                $dasi_cod_cuen = trim($dasi_cod_cuen);
+                $dasi_cod_cact = trim($dasi_cod_cact);
+                $ccos_cod_ccos = trim($ccos_cod_ccos);
+                $dasi_dml_dasi = trim($dasi_dml_dasi);
+                $dasi_cml_dasi = trim($dasi_cml_dasi);
+                $dasi_det_asi = trim($dasi_det_asi);
                 $processedRows++;
 
                 if ($x > 1) {
